@@ -6,17 +6,13 @@ from cocotb.regression import TestFactory
 
 class SkipJack:
     def __init__(self):
-        # F is an 8-bit S-box
         self.F = []
         self.defineF()
-        # w1, w2, w3, w4 are 16-bit integers
         self.w1 = 0
         self.w2 = 0
         self.w3 = 0
         self.w4 = 0
 
-    # plaintext is a 64-bit integer
-    # key is a list of 10-bytes
     def encrypt(self, plaintext, key):
         print(len(self.F))
         self.splitWord(plaintext)
@@ -52,14 +48,13 @@ class SkipJack:
         self.w4 = c3
 
 
-    # w is a 16-bit integer
     def G(self, round, key, w):
         g = [0] * 6
         g[0] = (w >> 8) & 0xff
         g[1] = w & 0xff
         j = (4 * (round - 1)) % 10
 
-        for i in range(2, 6): # gives i = 2,3,4,5
+        for i in range(2, 6):
             g[i] = self.F[g[i - 1] ^ key[j]] ^ g[i - 2]
             j = (j + 1) % 10
 
@@ -67,7 +62,6 @@ class SkipJack:
 
     
 
-    # append the four 16-bit words w1,w2,w3,w4 to return a 64-bit word
     def appendWords(self):
         x1 = self.w1 << 3 * 16
         x2 = self.w2 << 2 * 16
@@ -75,15 +69,14 @@ class SkipJack:
         x4 = self.w4
         return x1 | x2 | x3 | x4
 
-    # w is a 64-bit word. This function splits w into
-    # four 16-bit words which are stored in w1, w2, w3, w4
+
     def splitWord(self, w):
         self.w1 = (w >> (16 * 3)) & 0xffff
         self.w2 = (w >> (16 * 2)) & 0xffff
         self.w3 = (w >> (16 * 1)) & 0xffff
         self.w4 = w & 0xffff
 
-    # print the round number and the current values of w1,w2,w3,w4
+
     def printStatus(self, round):
         w = self.appendWords()
         print("round=" + str(round) + " " + hex(w))
@@ -135,36 +128,29 @@ async def reset_dut(dut, duration_ns=100):
 
 
 @cocotb.test()
-async def skipjack_pipelined_test(dut):
+async def skipjack_iterative_test(dut):
     """
-    Test skipjack_pipelined module against the software Skipjack implementation.
+    Test skipjack_iterative module against the software Skipjack implementation.
     """
-    # Initialize clock
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
 
-    # Create software Skipjack instance
     sj = SkipJack()
 
-    # Test parameters
-    key = 0x0123456789abcdef0123  # 80-bit key
-    plaintext = 0x33221100ddccbbaa  # 64-bit plaintext
+    key = 0x0123456789abcdef0123
+    plaintext = 0x33221100ddccbbaa
     expected_ciphertext = sj.encrypt(plaintext, [key >> (8 * i) & 0xFF for i in range(9, -1, -1)])
 
-    # Apply reset
     await reset_dut(dut)
 
-    # Provide inputs
     dut.key.value = key
     dut.s_axis_tdata.value = plaintext
     dut.s_axis_tvalid.value = 1
 
-    # Wait for ready
     while not dut.s_axis_tready.value:
         # print(dut.m_axis_tdata.value)
         await RisingEdge(dut.clk)
     
-    # Wait for valid output
-    dut.m_axis_tready.value = 1  # Indicate ready to receive data
+    dut.m_axis_tready.value = 1
     while not dut.m_axis_tvalid.value:
         try:
             print(hex(dut.m_axis_tdata.value))
@@ -172,10 +158,8 @@ async def skipjack_pipelined_test(dut):
             pass
         await RisingEdge(dut.clk)
 
-    # Read the output
     actual_ciphertext = int(dut.m_axis_tdata.value)
     print(hex(dut.m_axis_tdata.value))
-    # Check outputs
     assert actual_ciphertext == expected_ciphertext, (
         f"Mismatch: DUT={hex(actual_ciphertext)}, Expected={hex(expected_ciphertext)}"
     )

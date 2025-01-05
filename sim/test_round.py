@@ -1,20 +1,17 @@
 import cocotb
-from cocotb.clock import Timer
+from cocotb.clock import Clock
+from cocotb.triggers import RisingEdge, FallingEdge, Timer
 from cocotb.utils import get_sim_time
 
 class SkipJack:
     def __init__(self):
-        # F is an 8-bit S-box
         self.F = []
         self.defineF()
-        # w1, w2, w3, w4 are 16-bit integers
         self.w1 = 0
         self.w2 = 0
         self.w3 = 0
         self.w4 = 0
 
-
-    # w is a 16-bit integer
     def G(self, round, key, w):
         g = [0] * 6
         g[0] = (w >> 8) & 0xff
@@ -24,7 +21,7 @@ class SkipJack:
         for i in range(2, 6): # gives i = 2,3,4,5
             g[i] = self.F[g[i - 1] ^ key[j]] ^ g[i - 2]
             j = (j + 1) % 10
-        
+
         return (g[4] << 8) | g[5]
 
     def defineF(self):
@@ -58,21 +55,61 @@ class SkipJack:
                   0x5e, 0x6c, 0xa9, 0x13, 0x57, 0x25, 0xb5, 0xe3,
                   0xbd, 0xa8, 0x3a, 0x01, 0x05, 0x59, 0x2a, 0x46]
 
+@cocotb.coroutine
+async def send_data(dut, data):
+    """Helper function to send data through AXI Stream interface"""
+    dut.s_axis_tvalid.value = 1
+    dut.s_axis_tdata.value = data
+    while not dut.s_axis_tready.value:
+        await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    dut.s_axis_tvalid.value = 0
+
+@cocotb.coroutine
+async def receive_data(dut):
+    """Helper function to receive data through AXI Stream interface"""
+    while not dut.m_axis_tvalid.value:
+        await RisingEdge(dut.clk)
+    dut.m_axis_tready.value = 1
+    await RisingEdge(dut.clk)
+    data = dut.m_axis_tdata.value
+    dut.m_axis_tready.value = 0
+    return data
 
 @cocotb.test()
 async def round_test(dut):
+    """Test the round module with AXI4-Stream interface"""
+    
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
+
     sj = SkipJack()
-    dut.idata.value = 0
+
+    dut.rst.value = 1
+    dut.s_axis_tvalid.value = 0
+    dut.m_axis_tready.value = 0
+    await RisingEdge(dut.clk)
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
     start_time_ns = get_sim_time(units='us')
+
     for i in range(1, 32):
-        dut.idata.value = 0x3322
+
         dut.counter.value = i - 1
         dut.key.value = 0x00998877665544332211
-        await Timer(2)
-        print((dut.odata.value))
 
-        data = sj.G(round=i, w=0x3322, key=[0x00, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11])
-        print(bin(data))
-        assert dut.odata.value == data, f"output round was incorrect on the th cycle"
+        await send_data(dut, 0x3322)
 
+        result = await receive_data(dut)
 
+        expected = sj.G(round=i, w=0x3322, 
+                       key=[0x00, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11])
+
+        print(f"Round {i}:")
+        print(f"Got:      {hex(result)}")
+        print(f"Expected: {hex(expected)}")
+
+        assert result == expected, f"Output round was incorrect on round {i}"
+
+        await Timer(2, units='ns')
