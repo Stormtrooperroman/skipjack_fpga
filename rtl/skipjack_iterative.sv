@@ -67,7 +67,7 @@ module skipjack_iterative (
           next_state = ROUND_START;
           
       DONE:
-        if (s_axis_tvalid)
+        if (m_axis_tready)
           next_state = IDLE;
           
       default:

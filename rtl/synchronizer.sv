@@ -19,6 +19,6 @@ generate
   end
 endgenerate
 
-assign q = pipeline[STAGES-1];
+assign q = ~pipeline[STAGES-1];
 
 endmodule

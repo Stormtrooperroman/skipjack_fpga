@@ -136,8 +136,9 @@ async def skipjack_iterative_test(dut):
 
     sj = SkipJack()
 
-    key = 0x0123456789abcdef0123
+    key = 0x00998877665544332211
     plaintext = 0x33221100ddccbbaa
+    # 0xaa 0xbb 0xcc 0xdd 0x00 0x11 0x22 0x33
     expected_ciphertext = sj.encrypt(plaintext, [key >> (8 * i) & 0xFF for i in range(9, -1, -1)])
 
     await reset_dut(dut)

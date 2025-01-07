@@ -6,7 +6,7 @@ module top (
   output txd
 );
 
-  logic [0:79] KEY = 80'h0123456789abcdef0123;
+  logic [0:79] KEY = 80'h00998877665544332211;
 
   logic rst;
   logic pll_clk;
